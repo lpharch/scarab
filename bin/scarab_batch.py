@@ -26,6 +26,7 @@ Description:
 
 import os
 import argparse
+import pdb
 
 from scarab_globals import *
 from scarab_globals.scarab_batch_types import *
@@ -39,6 +40,7 @@ parser.add_argument('--run', action='store_true', help="Run all jobs in jobfile.
 parser.add_argument('--progress', action='store_true', help="Print progress of all jobs in jobfile.")
 parser.add_argument('--stat', action='append', default=None, help="Print stat from results of all jobs in jobfile.")
 parser.add_argument('--core', action='append', default=None, help="Core(s) to get stats for. Only valid with --stat option.")
+parser.add_argument('--export_stat_csv', default=None, help="Export the stat as a csv file with the specified name")
 parser.add_argument('--results_dir', nargs='*', default=None, help="Results directory(s) to parse stats from. Only valid with --stat option.")
 parser.add_argument('--base', default=None, help="Normalize all runs to this run.")
 parser.add_argument('--improvement', action='store_true', help="Use the improvement formula instead of speedup.")
@@ -59,6 +61,9 @@ if args.amean and not args.stat:
   print("Usage: --amean is only valid with --stat option.")
 if args.gmean and not args.stat:
   print("Usage: --gmean is only valid with --stat option.")
+if args.export_stat_csv and not args.stat:
+  print("Usage: --export is only valid with --stat option.")
+
 
 ###############################################
 
@@ -113,7 +118,11 @@ def get_stats(stat_name, cores, results_dirs, base=None):
   if args.gmean:
     df.gmean()
 
-  df.print()
+  if args.export_stat_csv:
+    with open(args.export_stat_csv, 'w') as csvof:
+      csvof.write(df.df.to_csv())
+  else:
+    df.print()
 
 def __main():
   import_jobfile(args.jobfile)

@@ -88,7 +88,8 @@ void ramulator_init() {
 void ramulator_finish() {
   wrapper->finish();
 
-  delete wrapper;
+  //seems it's causing double free here, temp block this
+  //delete wrapper;
   delete configs;
 }
 
