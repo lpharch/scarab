@@ -197,10 +197,16 @@ void init_cache(Cache* cache, const char* name, uns cache_size, uns assoc,
   }
 }
 
-/**************************************************************************************/
-/* cache_access: Does a cache lookup based on the address.  Returns a pointer
- * to the cache line data if it is found.  */
-
+/**
+ * @brief Does a cache lookup based on the address.  Returns a pointer
+ * to the cache line data if it is found.
+ * 
+ * @param cache 
+ * @param addr 
+ * @param line_addr 
+ * @param update_repl 
+ * @return void* 
+ */
 void* cache_access(Cache* cache, Addr addr, Addr* line_addr, Flag update_repl) {
   Addr tag;
   uns  set = cache_index(cache, addr, &tag, line_addr);
@@ -210,6 +216,7 @@ void* cache_access(Cache* cache, Addr addr, Addr* line_addr, Flag update_repl) {
     return access_ideal_storage(cache, set, tag, addr);
   }
 
+  //search the ways
   for(ii = 0; ii < cache->assoc; ii++) {
     Cache_Entry* line = &cache->entries[set][ii];
 
@@ -230,8 +237,10 @@ void* cache_access(Cache* cache, Addr addr, Addr* line_addr, Flag update_repl) {
       return line->data;
     }
   }
+
   /* if it's a miss and we're doing ideal replacement, look in the unsure list
    */
+  //WQ: not sure what unsure list is
   if(cache->repl_policy == REPL_IDEAL) {
     DEBUG(0, "Checking unsure list '%s' at (set %u)\n", cache->name, set);
     return access_unsure_lines(cache, set, tag, update_repl);
@@ -242,7 +251,6 @@ void* cache_access(Cache* cache, Addr addr, Addr* line_addr, Flag update_repl) {
           set, hexstr64s(addr));
     return access_shadow_lines(cache, set, tag);
   }
-
 
   DEBUG(0, "Didn't find line in set %u in cache '%s' base 0x%s\n", set,
         cache->name, hexstr64s(addr));
@@ -456,7 +464,7 @@ void* get_next_repl_line(Cache* cache, uns8 proc_id, Addr addr,
  * @param cache 
  * @param proc_id 
  * @param set 
- * @param way 
+ * @param way selected way will be store in this pointer 
  * @return Cache_Entry* 
  */
 Cache_Entry* find_repl_entry(Cache* cache, uns8 proc_id, uns set, uns* way) {
@@ -516,68 +524,104 @@ Cache_Entry* find_repl_entry(Cache* cache, uns8 proc_id, uns set, uns* way) {
        * own partition. 
        */
       uns8 way_proc_id;
-      uns  lru_ind             = 0;
-      uns  total_assigned_ways = 0;
+     // uns  lru_ind             = 0;
+     // uns  total_assigned_ways = 0;
 
-      for(way_proc_id = 0; way_proc_id < NUM_CORES; way_proc_id++) {
-        cache->num_ways_occupied_core[way_proc_id] = 0;
-        cache->lru_time_core[way_proc_id]          = MAX_CTR;
-        ASSERT(way_proc_id, cache->num_ways_allocted_core[way_proc_id]);
-        total_assigned_ways += cache->num_ways_allocted_core[way_proc_id];
-      }
 
-      ASSERT(proc_id, total_assigned_ways <= cache->assoc);
-      if(total_assigned_ways != cache->assoc){
-        printf("WARN: total allocated cache way smaller than all ways");
-      }
-
+      //still keep the old bookkeeping
       for(ii = 0; ii < cache->assoc; ii++) {
         Cache_Entry* entry = &cache->entries[set][ii];
         if(!entry->valid) {
-          lru_ind = ii;
-          *way    = lru_ind;
-          return &cache->entries[set][lru_ind];
+          continue;
         }
-        cache->num_ways_occupied_core[entry->proc_id]++;
         if(entry->last_access_time < cache->lru_time_core[entry->proc_id]) {
           cache->lru_index_core[entry->proc_id] = ii;
           cache->lru_time_core[entry->proc_id]  = entry->last_access_time;
         }
       }
 
-      // find the core that overoccupies its partition the most
-      int max_extra_occ = 0;
-      int repl_proc_id  = -1;
-      for(way_proc_id = 0; way_proc_id < NUM_CORES; way_proc_id++) {
-        if(cache->num_ways_allocted_core[way_proc_id] <
-           cache->num_ways_occupied_core[way_proc_id]) {
-            int extra_occ = cache->num_ways_occupied_core[way_proc_id] -
-                            cache->num_ways_allocted_core[way_proc_id];
-            if(extra_occ > max_extra_occ) {
-              max_extra_occ = extra_occ;
-              repl_proc_id  = way_proc_id;
-            }
+      uns search_start = 0;
+      uns search_end = 0;
+      for(way_proc_id = 0; way_proc_id < proc_id; way_proc_id++){
+        search_start += cache->num_ways_allocted_core[way_proc_id];
+      }
+      search_end = search_start + cache->num_ways_allocted_core[proc_id];
+      Cache_Entry* victim = &cache->entries[set][search_start];
+      for(ii=search_start; ii < search_end; ii++){
+        Cache_Entry* entry = &cache->entries[set][ii];
+        *way = ii;
+
+        if(!entry->valid){
+          victim = entry;
+          break;
+        }
+        if(entry->last_access_time < victim->last_access_time){
+          victim = entry;
         }
       }
+      return victim;
 
-      int proc_id_extra_occ = cache->num_ways_occupied_core[proc_id] -
-                              cache->num_ways_allocted_core[proc_id];
+      ////WQ: old complicated logic, aqtually, this do seems to give an edge 
+      //for the partition'd performacne
+      //for(way_proc_id = 0; way_proc_id < NUM_CORES; way_proc_id++) {
+      //  cache->num_ways_occupied_core[way_proc_id] = 0;
+      //  cache->lru_time_core[way_proc_id]          = MAX_CTR;
+      //  ASSERT(way_proc_id, cache->num_ways_allocted_core[way_proc_id]);
+      //  total_assigned_ways += cache->num_ways_allocted_core[way_proc_id];
+      //}
 
-      if(cache->num_ways_allocted_core[proc_id] >
-           cache->num_ways_occupied_core[proc_id] ||
-         max_extra_occ > proc_id_extra_occ + 1 ||
-         ((max_extra_occ > proc_id_extra_occ) &&
-          ((proc_id + set) % NUM_CORES > (repl_proc_id + set) % NUM_CORES))) {
-        /* the complicated condition above ensures unbiased
-           distribution of over-occupancy in case a workload does
-           not occupy its allocated way partition */
-        ASSERT(0, repl_proc_id >= 0);
-        lru_ind = cache->lru_index_core[repl_proc_id];
-      } else {
-        lru_ind = cache->lru_index_core[proc_id];
-      }
-      *way = lru_ind;
-      return &cache->entries[set][lru_ind];
+      //ASSERT(proc_id, total_assigned_ways <= cache->assoc);
+      //if(total_assigned_ways != cache->assoc){
+      //  printf("WARN: total allocated cache way smaller than all ways");
+      //}
+
+      //for(ii = 0; ii < cache->assoc; ii++) {
+      //  Cache_Entry* entry = &cache->entries[set][ii];
+      //  if(!entry->valid) {
+      //    lru_ind = ii;
+      //    *way    = lru_ind;
+      //    return &cache->entries[set][lru_ind];
+      //  }
+      //  cache->num_ways_occupied_core[entry->proc_id]++;
+      //  if(entry->last_access_time < cache->lru_time_core[entry->proc_id]) {
+      //    cache->lru_index_core[entry->proc_id] = ii;
+      //    cache->lru_time_core[entry->proc_id]  = entry->last_access_time;
+      //  }
+      //}
+
+      //// find the core that overoccupies its partition the most
+      //int max_extra_occ = 0;
+      //int repl_proc_id  = -1;
+      //for(way_proc_id = 0; way_proc_id < NUM_CORES; way_proc_id++) {
+      //  if(cache->num_ways_allocted_core[way_proc_id] <
+      //     cache->num_ways_occupied_core[way_proc_id]) {
+      //      int extra_occ = cache->num_ways_occupied_core[way_proc_id] -
+      //                      cache->num_ways_allocted_core[way_proc_id];
+      //      if(extra_occ > max_extra_occ) {
+      //        max_extra_occ = extra_occ;
+      //        repl_proc_id  = way_proc_id;
+      //      }
+      //  }
+      //}
+
+      //int proc_id_extra_occ = cache->num_ways_occupied_core[proc_id] -
+      //                        cache->num_ways_allocted_core[proc_id];
+
+      //if(cache->num_ways_allocted_core[proc_id] >
+      //     cache->num_ways_occupied_core[proc_id] ||
+      //   max_extra_occ > proc_id_extra_occ + 1 ||
+      //   ((max_extra_occ > proc_id_extra_occ) &&
+      //    ((proc_id + set) % NUM_CORES > (repl_proc_id + set) % NUM_CORES))) {
+      //  /* the complicated condition above ensures unbiased
+      //     distribution of over-occupancy in case a workload does
+      //     not occupy its allocated way partition */
+      //  ASSERT(0, repl_proc_id >= 0);
+      //  lru_ind = cache->lru_index_core[repl_proc_id];
+      //} else {
+      //  lru_ind = cache->lru_index_core[proc_id];
+      //}
+      //*way = lru_ind;
+      //return &cache->entries[set][lru_ind];
     }
 
 
