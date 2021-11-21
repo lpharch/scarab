@@ -90,12 +90,16 @@ static double get_miss_rate_sum(uns* partition);
 static double get_gmean_perf(uns* partition);
 static double get_best_marginal_utility(uns* partition, uns proc_id,
                                         uns balance, uns* extra_ways);
+static double get_best_marginal_utility_order_two(uns* partition, uns proc_id,
+                                        uns balance, uns* extra_ways);
 static void   measure_miss_curves(void);
 static void   search_lookahead(void);
+static void   search_lookahead_manyway(void);
 static void   search_bruteforce(void);
 static void   set_partition(void);
 static void   debug_cache_part(uns* old_partition, uns* new_partition);
 
+//static uns floor_order_two(uns input);
 
 /**
  * @brief Create per-core shadow cache and set init part allocation
@@ -417,6 +421,10 @@ void cache_part_init(void) {
     case CACHE_PART_SEARCH_BRUTE_FORCE:
       search_func = &search_bruteforce;
       break;
+    case CACHE_PART_SEARCH_LOOKAHEAD_MANYWAY:
+      search_func = &search_lookahead_manyway;
+      break;
+
     default:
       FATAL_ERROR(0, "Unknown search algorithm %s\n",
                   Cache_Part_Search_str(L1_PART_METRIC));
@@ -614,6 +622,28 @@ double get_best_marginal_utility(uns* partition, uns proc_id, uns balance,
   return best_mu;
 }
 
+//only search on order of two
+double get_best_marginal_utility_order_two(uns* partition, uns proc_id, uns balance,
+                                 uns* extra_ways) {
+  uns old_ways = partition[proc_id];
+  uns max_ways = old_ways + balance;
+  ASSERT(0, max_ways <= L1_ASSOC);
+  double cur_metric = metric_func(partition);
+  double best_mu    = 0.0;
+  uns    best_ways  = old_ways;
+  for(uns ways = old_ways*2; ways <= max_ways; ways*=2) {
+    partition[proc_id] = ways;
+    double new_metric  = metric_func(partition);
+    double mu          = (new_metric - cur_metric) / (double)(ways - old_ways);
+    if(mu < best_mu) {
+      best_mu   = mu;
+      best_ways = ways;
+    }
+  }
+  partition[proc_id] = old_ways;
+  *extra_ways        = best_ways - old_ways;
+  return best_mu;
+}
 /**************************************************************************************/
 /* Use brute force method to estimate best partition */
 
@@ -673,6 +703,16 @@ void search_bruteforce(void) {
 /**************************************************************************************/
 /* Use lookahead method to estimate best partition */
 
+//uns floor_order_two(uns input){
+//  uns loc = 0;
+//  //hard code 2^7 for now
+//  for(uns i = 0; i < 7; i++){
+//    input = input >> 1;
+//    if(input & 1) loc++;
+//  }
+//  return 1 << loc;
+//}
+
 void search_lookahead(void) {
   uns* partition            = new_partition;
   uns  total_ways_allocated = 0;
@@ -713,11 +753,103 @@ void search_lookahead(void) {
   }
 }
 
+
+//partition alligned to nearest order of two
+void search_lookahead_manyway(void) {
+  printf("ManyWay LOOKAHEAD called\n");
+  uns* partition            = new_partition;
+  uns  total_ways_allocated = 0;
+  for(uns proc_id = 0; proc_id < NUM_CORES; proc_id++) {
+    partition[proc_id] = 1;
+    total_ways_allocated++;
+  }
+
+  while(total_ways_allocated < L1_ASSOC) {
+    uns    balance         = L1_ASSOC - total_ways_allocated;
+    double best_mu         = 1.0e99;
+    uns    best_proc_id    = NUM_CORES;
+    uns    best_extra_ways = 0;
+    DEBUG(0, "Balance %d\n", balance);
+    for(uns proc_id = 0; proc_id < NUM_CORES; proc_id++) {
+      uns    extra_ways;
+      double mu = get_best_marginal_utility_order_two(partition, proc_id, balance,
+                                            &extra_ways);
+      DEBUG(0, "Marginal util of core %d: %.4f (%d ways)\n", proc_id, mu,
+            extra_ways);
+      if(mu < best_mu) {
+        best_proc_id    = proc_id;
+        best_mu         = mu;
+        best_extra_ways = extra_ways;
+      }
+    }
+    ASSERT(0, best_mu != 1.0e99);
+    if(best_extra_ways == 0) {
+      best_proc_id        = tie_breaker_proc_id;
+      tie_breaker_proc_id = (tie_breaker_proc_id + 1) % NUM_CORES;
+      best_extra_ways     = 1;
+    }
+    ASSERT(0, best_proc_id != NUM_CORES);
+    partition[best_proc_id] += best_extra_ways;
+    total_ways_allocated += best_extra_ways;
+    DEBUG(0, "Gave %d ways to core %d, marginal util: %.4f\n", best_extra_ways,
+          best_proc_id, best_mu);
+  }
+
+  ////round it down to neares order of 2
+  //double* margin_gain = calloc(NUM_CORES, sizeof(double));
+  //uns budget = 0;
+  //for(uns proc_id = 0; proc_id < NUM_CORES; proc_id++){
+  //  uns floor = floor_order_two(partition[proc_id]);
+  //  budget += (partition[proc_id] - floor);
+  //  partition[proc_id] = floor;
+  //}
+
+  ////allocate the budget 
+  //uns retry = 0;
+  //while(budget){
+  //  //calculate the margin gain 
+  //  for(uns proc_id = 0; proc_id < NUM_CORES; proc_id++){
+  //    uns old_alloc = partition[proc_id];
+  //    double old_metric = metric_func(partition);
+  //    partition[proc_id] = partition[proc_id]*2;
+  //    double new_metric = metric_func(partition);
+  //    margin_gain[proc_id] = (new_metric - old_metric)/old_alloc;
+  //    partition[proc_id] = old_alloc;
+  //  }
+
+  //  double best_margin = margin_gain[0];
+  //  uns best_recip = 0;
+  //  for(uns proc_id = 0; proc_id < NUM_CORES; proc_id++){
+  //    if(margin_gain[proc_id] > best_margin){
+  //      best_recip = proc_id;
+  //      best_margin = margin_gain[proc_id];
+  //    }
+  //  }
+
+  //  if(budget >= partition[best_recip]){
+  //    budget -= partition[best_recip];
+  //    partition[best_recip] *= 2;
+  //  } else {
+  //    retry += 1;
+  //    if(retry == 20){
+  //      printf("Cannot converge after 20 iterations\n");
+  //      break;
+  //    }
+  //  }
+  //}
+  //DEBUG(0, "Realign the partition to nearest 2 done\n");
+  //free(margin_gain);
+}
+
+
+
 /**************************************************************************************/
 /* Set target partition */
 
 void set_partition(void) {
   //the one bind at config time (lookahead/brutal force)
+  //search_func will figure out the new partition and put
+  //it in new_partition
   search_func();
 
   if(ENABLE_GLOBAL_DEBUG_PRINT && DEBUG_RANGE_COND(0)) {
