@@ -55,7 +55,7 @@
 static inline uns  cache_index(Cache* cache, Addr addr, Addr* tag,
                                Addr* line_addr);
 static inline void update_repl_policy(Cache*, Cache_Entry*, uns, uns, Flag);
-static inline Cache_Entry* find_repl_entry(Cache*, uns8, uns, uns*);
+static inline Cache_Entry* find_repl_entry(Cache*, uns8, uns, uns*, Addr);
 
 /* for ideal replacement */
 static inline void*        access_unsure_lines(Cache*, uns, Addr, Flag);
@@ -293,7 +293,7 @@ void* cache_insert_replpos(Cache* cache, uns8 proc_id, Addr addr,
     new_line        = insert_sure_line(cache, set, tag);
     *repl_line_addr = 0;
   } else {
-    new_line = find_repl_entry(cache, proc_id, set, &repl_index);
+    new_line = find_repl_entry(cache, proc_id, set, &repl_index, addr);
     /* before insert the data into cache, if the cache has shadow entry */
     /* insert that entry to the shadow cache */
     if((cache->repl_policy == REPL_SHADOW_IDEAL) && new_line->valid)
@@ -449,7 +449,7 @@ void* get_next_repl_line(Cache* cache, uns8 proc_id, Addr addr,
   uns          repl_index;
   uns          set_index = cache_index(cache, addr, &line_tag, &line_addr);
   Cache_Entry* new_line  = find_repl_entry(cache, proc_id, set_index,
-                                          &repl_index);
+                                          &repl_index, addr);
 
   *repl_line_addr = new_line->base;
   *valid          = new_line->valid;
@@ -467,7 +467,7 @@ void* get_next_repl_line(Cache* cache, uns8 proc_id, Addr addr,
  * @param way selected way will be store in this pointer 
  * @return Cache_Entry* 
  */
-Cache_Entry* find_repl_entry(Cache* cache, uns8 proc_id, uns set, uns* way) {
+Cache_Entry* find_repl_entry(Cache* cache, uns8 proc_id, uns set, uns* way, Addr addr) {
   int ii;
   switch(cache->repl_policy) {
     case REPL_SHADOW_IDEAL:
@@ -524,8 +524,8 @@ Cache_Entry* find_repl_entry(Cache* cache, uns8 proc_id, uns set, uns* way) {
        * own partition. 
        */
       uns8 way_proc_id;
-     // uns  lru_ind             = 0;
-     // uns  total_assigned_ways = 0;
+      // uns  lru_ind             = 0;
+      // uns  total_assigned_ways = 0;
 
 
       //still keep the old bookkeeping
@@ -539,13 +539,24 @@ Cache_Entry* find_repl_entry(Cache* cache, uns8 proc_id, uns set, uns* way) {
           cache->lru_time_core[entry->proc_id]  = entry->last_access_time;
         }
       }
+      //bookkeep done
 
       uns search_start = 0;
       uns search_end = 0;
       for(way_proc_id = 0; way_proc_id < proc_id; way_proc_id++){
         search_start += cache->num_ways_allocted_core[way_proc_id];
       }
-      search_end = search_start + cache->num_ways_allocted_core[proc_id];
+      if(L1_MANYWAY && (L1_MANYWAY_SUBSET_ASSOC < cache->num_ways_allocted_core[proc_id])){
+        //manyway part, partition is larger but replacement still happen within each subset
+        //simplified modelling here, ignore which subset the addr will map to
+        uns num_subsets = cache->num_ways_allocted_core[proc_id] / L1_MANYWAY_SUBSET_ASSOC;
+        search_start += ((addr % num_subsets) * L1_MANYWAY_SUBSET_ASSOC);
+        search_end = search_start + L1_MANYWAY_SUBSET_ASSOC;
+      } else {
+        search_end = search_start + cache->num_ways_allocted_core[proc_id];
+      }
+ 
+      //lru in the candidates
       Cache_Entry* victim = &cache->entries[set][search_start];
       for(ii=search_start; ii < search_end; ii++){
         Cache_Entry* entry = &cache->entries[set][ii];
@@ -622,8 +633,7 @@ Cache_Entry* find_repl_entry(Cache* cache, uns8 proc_id, uns set, uns* way) {
       //}
       //*way = lru_ind;
       //return &cache->entries[set][lru_ind];
-    }
-
+      }
 
     default:
       ASSERT(0, FALSE);
@@ -1001,7 +1011,7 @@ void* cache_insert_lru(Cache* cache, uns8 proc_id, Addr addr, Addr* line_addr,
     new_line        = insert_sure_line(cache, set, tag);
     *repl_line_addr = 0;
   } else {
-    new_line = find_repl_entry(cache, proc_id, set, &repl_index);
+    new_line = find_repl_entry(cache, proc_id, set, &repl_index, addr);
     /* before insert the data into cache, if the cache has shadow entry */
     /* insert that entry to the shadow cache */
     if((cache->repl_policy == REPL_SHADOW_IDEAL) && new_line->valid)

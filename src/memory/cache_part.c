@@ -113,6 +113,9 @@ void cache_part_init(void) {
   ASSERTM(0, !PRIVATE_L1, "Cache partitioning works only on shared cache.\n");
   ASSERT(0, L1_CACHE_REPL_POLICY == REPL_PARTITION);
   ASSERT(0, L1_ASSOC <= 128);
+  if(L1_MANYWAY){
+    ASSERT(0, L1_MANYWAY_SUBSET_ASSOC <= L1_ASSOC);
+  }
 
   // create shadow cache for each core
   proc_infos = calloc(NUM_CORES, sizeof(Proc_Info));
@@ -756,12 +759,11 @@ void search_lookahead(void) {
 
 //partition alligned to nearest order of two
 void search_lookahead_manyway(void) {
-  printf("ManyWay LOOKAHEAD called\n");
   uns* partition            = new_partition;
   uns  total_ways_allocated = 0;
   for(uns proc_id = 0; proc_id < NUM_CORES; proc_id++) {
-    partition[proc_id] = 1;
-    total_ways_allocated++;
+    partition[proc_id] = L1_MANYWAY_SUBSET_ASSOC;
+    total_ways_allocated += L1_MANYWAY_SUBSET_ASSOC;
   }
 
   while(total_ways_allocated < L1_ASSOC) {

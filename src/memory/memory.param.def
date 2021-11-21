@@ -288,6 +288,12 @@ DEF_PARAM(l1_part_search, L1_PART_SEARCH, uns, Cache_Part_Search, 0, )
 DEF_PARAM(l1_part_use_stalling, L1_PART_USE_STALLING, Flag, Flag, TRUE, )
 DEF_PARAM(l1_part_fill_delay, L1_PART_FILL_DELAY, uns, uns, 0, )
 DEF_PARAM(l1_shadow_tags_modulo, L1_SHADOW_TAGS_MODULO, uns, uns, 1, )
+
+//ManyWay LLC specific params
+DEF_PARAM(l1_manyway, L1_MANYWAY, Flag, Flag, FALSE, )
+DEF_PARAM(l1_manyway_subset_assoc, L1_MANYWAY_SUBSET_ASSOC, uns, uns, 8, )
+
+
 // L1 partitioning done
 
 // Hierarchical MSHR behavior for MLC and L1 queues

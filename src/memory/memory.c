@@ -1929,6 +1929,7 @@ static void mem_process_l1_reqs() {
 
     /* If this is a new request, reserve L1 port and transition to wait state */
     if(req->state == MRS_L1_NEW) {
+      //try obtain the port and change MRS state
       mem_start_l1_access(req);
       STAT_EVENT(req->proc_id, L1_ACCESS);
       if(req->type == MRT_DPRF || req->type == MRT_IPRF)
@@ -1942,6 +1943,7 @@ static void mem_process_l1_reqs() {
               mem->req_count, mem->l1_queue.entry_count,
               mem->bus_out_queue.entry_count, mem->l1fill_queue.entry_count);
 
+      //heavy work got done here
       if(mem_complete_l1_access(req, &(mem->l1_queue.base[ii]),
                                 &out_queue_insertion_count,
                                 &l1_queue_reserve_entry_count))
