@@ -125,6 +125,7 @@ typedef struct Ported_Cache_struct {
 typedef struct Uncore_struct {
   Ported_Cache* mlc;
   Ported_Cache* l1;
+  Cache* l1_manyway_dir;
   uns           num_outstanding_l1_accesses;
   uns           num_outstanding_l1_misses;
   Counter       mem_block_start;

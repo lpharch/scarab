@@ -74,6 +74,7 @@
 
 #define MLC(proc_id) (mem->uncores[proc_id].mlc)
 #define L1(proc_id) (mem->uncores[proc_id].l1)
+#define L1_DIR(proc_id) (mem->uncores[proc_id].l1_manyway_dir)
 
 /**************************************************************************************/
 /* Global Variables */
@@ -397,6 +398,7 @@ void init_memory() {
 void init_uncores(void) {
   mem->uncores = (Uncore*)malloc(sizeof(Uncore) * NUM_CORES);
 
+  //WQ: TODO, this definately doesn't looks correct
   /* Initialize MLC cache (shared only for now) */
   Ported_Cache* mlc = (Ported_Cache*)malloc(sizeof(Ported_Cache));
   init_cache(&mlc->cache, "MLC_CACHE", MLC_SIZE, MLC_ASSOC, MLC_LINE_SIZE,
@@ -450,6 +452,16 @@ void init_uncores(void) {
     }
     for(uns proc_id = 0; proc_id < NUM_CORES; proc_id++) {
       L1(proc_id) = l1;
+    }
+
+    //LLC ManyWay Dir (Only support shared LLC)
+    Cache* l1_manyway_dir = (Cache*)malloc(sizeof(Cache));
+    //hardcode dir repl for now (0 stands for LRU)
+    init_cache(l1_manyway_dir, "L1_MANYWAY_DIR", L1_SIZE, L1_MANYWAY_DIR_ASSOC, 
+               L1_LINE_SIZE, sizeof(L1_Data), REPL_TRUE_LRU);
+
+    for(uns proc_id = 0; proc_id < NUM_CORES; proc_id++) {
+      L1_DIR(proc_id) = l1_manyway_dir;
     }
   }
 
@@ -4321,6 +4333,18 @@ Flag l1_fill_line(Mem_Req* req) {
     return SUCCESS;
   }
 
+  //WQ: seems scarab is not modelling the mem sys correctly, there could be cases
+  //when two req of the same block is propogating at the same time in the system
+  //results in when fill the cache line, it was already presented there
+  //so, temporarily fix here:
+  Addr dummy_line_addr;
+  if(cache_access(&L1(req->proc_id)->cache, req->addr, &dummy_line_addr, FALSE)){
+    //for some reason the blk is already filled
+    DEBUG(req->proc_id, "Duplicated L1 Fill, skipping\n");
+    return SUCCESS;
+  }
+
+
   /* Do not insert the line yet, just check which line we
      need to replace. If that line is dirty, it's possible
      that we won't be able to insert the writeback into the
@@ -4505,14 +4529,25 @@ Flag l1_fill_line(Mem_Req* req) {
   }
 
   STAT_EVENT(req->proc_id, NORESET_L1_FILL);
+
+  //sync dir and cache
+  //update LLC Manyway Dir
+  if(L1_MANYWAY){
+    update_dir(req->proc_id, &L1(req->proc_id)->cache, L1_DIR(req->proc_id),
+               req->addr, repl_line_addr);
+  }
+
+  //stat for prefetch fill
   if(mem_req_type_is_prefetch(req->type) || req->demand_match_prefetch)
     STAT_EVENT(req->proc_id, NORESET_L1_FILL_PREF);
   else
     STAT_EVENT(req->proc_id, NORESET_L1_FILL_NONPREF);
+
+  //stat for wb fill
   if(req->type == MRT_WB_NODIRTY || req->type == MRT_WB) {
     STAT_EVENT(req->proc_id, L1_WB_FILL);
     STAT_EVENT(req->proc_id, CORE_L1_WB_FILL);
-  } else {
+  } else { //stat for normal fill, also update the shadow cache
     STAT_EVENT(req->proc_id, L1_FILL);
     STAT_EVENT(req->proc_id, CORE_L1_FILL);
     INC_STAT_EVENT(req->proc_id, TOTAL_L1_MISS_LATENCY,
@@ -4541,8 +4576,8 @@ Flag l1_fill_line(Mem_Req* req) {
         STAT_EVENT(req->proc_id, CORE_PREF_L1_PARTIAL_USED);
         STAT_EVENT_ALL(PREF_L1_TOTAL_PARTIAL_USED);
       }
-      // fill umon_cache
 
+      // fill umon_cache
       if(PARTITION_UMON_DSS_PREF_ENABLE) {
         Cache *          l1_cache, *umon_cache;
         Umon_Cache_Data* umon_data;
@@ -4575,6 +4610,7 @@ Flag l1_fill_line(Mem_Req* req) {
     }
   }
 
+  //update the newly inserted blk
   /* this will make it bring the line into the l1 and then modify it */
   data->proc_id = req->proc_id;
   data->dirty   = ((req->type == MRT_WB) &&
@@ -5107,6 +5143,14 @@ L1_Data* l1_pref_cache_access(Mem_Req* req) {
                         &line_addr, &repl_line_addr);
     STAT_EVENT(req->proc_id, L1_DATA_EVICT);
     STAT_EVENT(req->proc_id, L1_PREF_MOVE_L1);
+
+    //sync dir and cache
+    //update LLC Manyway Dir
+    if(L1_MANYWAY){
+      update_dir(req->proc_id, &L1(req->proc_id)->cache, L1_DIR(req->proc_id),
+                 req->addr, repl_line_addr);
+    }
+
     if(data) {
       if(data->dcache_touch)
         STAT_EVENT(req->proc_id, TOUCH_L1_REPLACE);
@@ -5114,6 +5158,7 @@ L1_Data* l1_pref_cache_access(Mem_Req* req) {
         STAT_EVENT(req->proc_id, NO_TOUCH_L1_REPLACE);
     }
 
+    //WQ: take a look at here
     if(data->dirty) {
       /* need to do a write-back */
       DEBUG(req->proc_id, "Scheduling writeback of addr:0x%s\n",

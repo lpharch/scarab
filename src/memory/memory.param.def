@@ -293,6 +293,8 @@ DEF_PARAM(l1_shadow_tags_modulo, L1_SHADOW_TAGS_MODULO, uns, uns, 1, )
 DEF_PARAM(l1_manyway, L1_MANYWAY, Flag, Flag, FALSE, )
 DEF_PARAM(l1_manyway_subset_assoc, L1_MANYWAY_SUBSET_ASSOC, uns, uns, 8, )
 
+DEF_PARAM(l1_manyway_dir_assoc, L1_MANYWAY_DIR_ASSOC, uns, uns, 8, )
+DEF_PARAM(l1_manyway_dir_cycles, L1_MANYWAY_DIR_CYCLES, uns, uns, 24, )
 
 // L1 partitioning done
 
