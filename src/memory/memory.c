@@ -74,7 +74,6 @@
 
 #define MLC(proc_id) (mem->uncores[proc_id].mlc)
 #define L1(proc_id) (mem->uncores[proc_id].l1)
-#define L1_DIR(proc_id) (mem->uncores[proc_id].l1_manyway_dir)
 
 /**************************************************************************************/
 /* Global Variables */
@@ -100,7 +99,10 @@ Counter Mem_Req_Priority[MRT_NUM_ELEMS];
 Counter Mem_Req_Priority_Offset[MRT_NUM_ELEMS];
 
 /**************************************************************************************/
-/* Local Prototypes */
+/* Local Prototypes 
+ * a.k.a. these function are within the scope of this file, not exposed to our parts
+ * of the simulator
+ */
 
 static void init_mem_req_type_priorities(void);
 static void init_uncores(void);
@@ -210,6 +212,10 @@ static inline Flag queue_full(Mem_Queue* queue);
 static inline uns  queue_num_free(Mem_Queue* queue);
 
 Flag is_final_state(Mem_Req_State state);
+
+
+
+
 
 /**************************************************************************************/
 /* set_memory: */
@@ -392,7 +398,9 @@ void init_memory() {
 }
 
 /**
- * @brief this function should only be called once in warmup mode
+ * @brief 
+ * 
+ * this function should only be called once in warmup mode
  * 
  */
 void init_uncores(void) {
@@ -452,16 +460,6 @@ void init_uncores(void) {
     }
     for(uns proc_id = 0; proc_id < NUM_CORES; proc_id++) {
       L1(proc_id) = l1;
-    }
-
-    //LLC ManyWay Dir (Only support shared LLC)
-    Cache* l1_manyway_dir = (Cache*)malloc(sizeof(Cache));
-    //hardcode dir repl for now (0 stands for LRU)
-    init_cache(l1_manyway_dir, "L1_MANYWAY_DIR", L1_SIZE, L1_MANYWAY_DIR_ASSOC, 
-               L1_LINE_SIZE, sizeof(L1_Data), REPL_TRUE_LRU);
-
-    for(uns proc_id = 0; proc_id < NUM_CORES; proc_id++) {
-      L1_DIR(proc_id) = l1_manyway_dir;
     }
   }
 
@@ -826,7 +824,7 @@ int cycle_busoutq_insert_count = 0;
 int l1_in_buf_count            = 0;
 
 /**
- * @brief Not sure what this func is doing 
+ * @brief 
  * 
  */
 void update_memory_queues() {
@@ -893,7 +891,7 @@ void update_memory() {
     update_memory_queues();
     update_on_chip_memory_stats();
 
-    //WQ: shouldn't this be called only when MLC is configurred?
+    //WQ: TODO: shouldn't this be called only when MLC is configurred?
     mem_process_mlc_fill_reqs();
     mem_process_l1_fill_reqs();
   }
@@ -1955,7 +1953,7 @@ static void mem_process_l1_reqs() {
               mem->req_count, mem->l1_queue.entry_count,
               mem->bus_out_queue.entry_count, mem->l1fill_queue.entry_count);
 
-      //heavy work got done here
+      //this func does most of the job
       if(mem_complete_l1_access(req, &(mem->l1_queue.base[ii]),
                                 &out_queue_insertion_count,
                                 &l1_queue_reserve_entry_count))
@@ -4336,7 +4334,8 @@ Flag l1_fill_line(Mem_Req* req) {
   //WQ: seems scarab is not modelling the mem sys correctly, there could be cases
   //when two req of the same block is propogating at the same time in the system
   //results in when fill the cache line, it was already presented there
-  //so, temporarily fix here:
+  //only temporarily fix here for now:
+  //TODO: to model the mshr correctly here
   Addr dummy_line_addr;
   if(cache_access(&L1(req->proc_id)->cache, req->addr, &dummy_line_addr, FALSE)){
     //for some reason the blk is already filled
@@ -4529,13 +4528,6 @@ Flag l1_fill_line(Mem_Req* req) {
   }
 
   STAT_EVENT(req->proc_id, NORESET_L1_FILL);
-
-  //sync dir and cache
-  //update LLC Manyway Dir
-  if(L1_MANYWAY){
-    update_dir(req->proc_id, &L1(req->proc_id)->cache, L1_DIR(req->proc_id),
-               req->addr, repl_line_addr);
-  }
 
   //stat for prefetch fill
   if(mem_req_type_is_prefetch(req->type) || req->demand_match_prefetch)
@@ -5144,13 +5136,6 @@ L1_Data* l1_pref_cache_access(Mem_Req* req) {
     STAT_EVENT(req->proc_id, L1_DATA_EVICT);
     STAT_EVENT(req->proc_id, L1_PREF_MOVE_L1);
 
-    //sync dir and cache
-    //update LLC Manyway Dir
-    if(L1_MANYWAY){
-      update_dir(req->proc_id, &L1(req->proc_id)->cache, L1_DIR(req->proc_id),
-                 req->addr, repl_line_addr);
-    }
-
     if(data) {
       if(data->dcache_touch)
         STAT_EVENT(req->proc_id, TOUCH_L1_REPLACE);
@@ -5275,7 +5260,9 @@ Flag is_final_state(Mem_Req_State state) {
 }
 
 /**
- * @brief what does "wp" stands for?
+ * @brief 
+ * 
+ * WQ: what does "wp" stands for?
  * 
  * @param line 
  * @param req 

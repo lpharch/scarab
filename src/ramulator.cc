@@ -88,8 +88,10 @@ void ramulator_init() {
 void ramulator_finish() {
   wrapper->finish();
 
-  //seems it's causing double free here, temp block this
-  //delete wrapper;
+  //WQ: seems it's causing double free here. Before a solution, can
+  //temporaily remove the line below to make sim finish.
+  delete wrapper;
+
   delete configs;
 }
 

@@ -614,7 +614,6 @@ void uop_sim() {
 void full_sim() {
   uns8 proc_id;
   Flag all_sim_done = FALSE;
-  Flag all_sim_running = TRUE;
 
   /* perform initialization  */
   init_model(WARMUP_MODE);  // make sure this happens before init_op_pool
@@ -652,7 +651,7 @@ void full_sim() {
   clear_stats = trigger_create("CLEAR_STATS", CLEAR_STATS, TRIGGER_ONCE);
 
   /* main loop */
-  while(!trigger_fired(sim_limit) && all_sim_running) {
+  while(!trigger_fired(sim_limit) && !all_sim_done) {
     freq_advance_time();
     sim_time = freq_time();
     model->cycle_func();
@@ -676,7 +675,6 @@ void full_sim() {
     }
 
     all_sim_done = TRUE;
-    all_sim_running = TRUE;
     for(proc_id = 0; proc_id < NUM_CORES; proc_id++) {
       Flag reachedInstLimit = (INST_LIMIT &&
                                inst_count[proc_id] >= inst_limit[proc_id]);
@@ -708,7 +706,6 @@ void full_sim() {
       }
 
       all_sim_done &= sim_done[proc_id];
-      all_sim_running &= !sim_done[proc_id];
     }
 
     if(cycle_count % FORWARD_PROGRESS_INTERVAL ==

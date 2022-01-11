@@ -78,7 +78,6 @@ void cmp_init(uns mode) {
   /**
    * The real initialization is done in warmup (guaranteed to happence once
    * before switch into simulation mode)
-   * 
    */
   ASSERT(0, mode == WARMUP_MODE);
 
@@ -117,7 +116,6 @@ void cmp_init(uns mode) {
 
   set_memory(&cmp_model.memory);
 
-  //init_memory will call init_uncores, which setup the partition stuffs
   init_memory();
 
   if(DVFS_ON)
@@ -394,12 +392,6 @@ void warmup_uncore(uns proc_id, Addr addr, Flag write) {
                                      &repl_line_addr);
     l1_data->proc_id = proc_id;
     l1_data->dirty   = write;
-
-    //warmup the L1 dir
-    Cache* l1_dir = cmp_model.memory.uncores[proc_id].l1_manyway_dir;
-    if(L1_MANYWAY){
-      update_dir(proc_id, l1_cache, l1_dir, addr, repl_line_addr);
-    }
   }
 
   if(L1_PART_SHADOW_WARMUP){

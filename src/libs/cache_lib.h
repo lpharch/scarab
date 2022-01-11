@@ -133,7 +133,7 @@ void* cache_insert_replpos(Cache* cache, uns8 proc_id, Addr addr,
                            Cache_Insert_Repl insert_repl_policy,
                            Flag              isPrefetch);
 void* cache_insert_lru(Cache*, uns8, Addr, Addr*, Addr*);
-Flag  cache_invalidate(Cache*, Addr, Addr*);
+void  cache_invalidate(Cache*, Addr, Addr*);
 void  cache_flush(Cache*);
 void* get_next_repl_line(Cache*, uns8, Addr, Addr*, Flag*);
 uns   ext_cache_index(Cache*, Addr, Addr*, Addr*);
@@ -147,9 +147,6 @@ int   cache_find_pos_in_lru_stack(Cache* cache, uns8 proc_id, Addr addr,
                                   Addr* line_addr);
 void  set_partition_allocate(Cache* cache, uns8 proc_id, uns num_ways);
 uns   get_partition_allocated(Cache* cache, uns8 proc_id);
-void  update_dir(uns8 proc_id, Cache* cache, Cache* dir, 
-                      Addr cache_install_addr, Addr cache_evict_addr);
- 
 /**************************************************************************************/
 
 
