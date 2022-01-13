@@ -66,8 +66,8 @@ static void warmup_uncore(uns proc_id, Addr addr, Flag write);
 
 void cmp_init(uns mode) {
   if(mode == SIMULATION_MODE) {
-    //set repl to LRU for warming up, waiting for partition trigger to switch it back 
-    //to REPL_PARTITION
+    // set repl to LRU for warming up, waiting for partition trigger to switch
+    // it back  to REPL_PARTITION
     if(L1_PART_ON && L1_PART_WARMUP) {
       ASSERT(0, cmp_model.memory.uncores[0].l1->cache.repl_policy == REPL_PARTITION);
       cmp_model.memory.uncores[0].l1->cache.repl_policy = REPL_TRUE_LRU;

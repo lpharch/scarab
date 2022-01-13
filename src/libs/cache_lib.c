@@ -471,7 +471,6 @@ Flag cache_invalidate(Cache* cache, Addr addr, Addr* line_addr) {
   return found;
 }
 
-
 /**
  * @brief Return a pointer to the lru item in the cache set
  * 
@@ -508,7 +507,7 @@ void* get_next_repl_line(Cache* cache, uns8 proc_id, Addr addr,
  * @return Cache_Entry* victim blk stored in this pointer (output)
  */
 Cache_Entry* find_repl_entry(Cache* cache, uns8 proc_id, uns set, uns* way, Addr addr) {
-  int ii;
+   int ii;
   switch(cache->repl_policy) {
     case REPL_SHADOW_IDEAL:
     case REPL_TRUE_LRU: {
@@ -567,6 +566,17 @@ Cache_Entry* find_repl_entry(Cache* cache, uns8 proc_id, uns set, uns* way, Addr
       // uns  lru_ind             = 0;
       // uns  total_assigned_ways = 0;
 
+      //for(way_proc_id = 0; way_proc_id < NUM_CORES; way_proc_id++) {
+      //  cache->num_ways_occupied_core[way_proc_id] = 0;
+      //  cache->lru_time_core[way_proc_id]          = MAX_CTR;
+      //  ASSERT(way_proc_id, cache->num_ways_allocted_core[way_proc_id]);
+      //  total_assigned_ways += cache->num_ways_allocted_core[way_proc_id];
+      //}
+
+      //ASSERT(proc_id, total_assigned_ways <= cache->assoc);
+      //if(total_assigned_ways != cache->assoc) {
+      //  printf("WARN: total allocated cache way smaller than all ways");
+      //}
 
       //still keep the old bookkeeping
       for(ii = 0; ii < cache->assoc; ii++) {

@@ -100,7 +100,6 @@ static void   search_bruteforce(void);
 static void   set_partition(void);
 static void   debug_cache_part(uns* old_partition, uns* new_partition);
 
-// static uns floor_order_two(uns input);
 
 /**
  * @brief Create per-core shadow cache and set init part allocation

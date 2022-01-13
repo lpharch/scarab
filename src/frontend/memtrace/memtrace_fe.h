@@ -1,4 +1,4 @@
-/* Copyright 2020 HPS/SAFARI Research Groups
+/* Copyright 2020 University of California Santa Cruz
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -20,36 +20,48 @@
  */
 
 /***************************************************************************************
- * File         : ramulator.h
- * Author       : SAFARI research group
- * Date         : 6/12/2018
- * Description  : Header file defining an interface to Ramulator
+ * File         : frontend/memtrace_fe.h
+ * Author       : Heiner Litz
+ * Date         :
+ * Description  :
  ***************************************************************************************/
 
-#ifndef __RAMULATOR_H__
-#define __RAMULATOR_H__
+#ifndef __MEMTRACE_FE_H__
+#define __MEMTRACE_FE_H__
 
 #include "globals/global_types.h"
-#include "memory/memory.h"
+
+/**************************************************************************************/
+/* Forward Declarations */
+
+struct Trace_Uop_struct;
+typedef struct Trace_Uop_struct Trace_Uop;
+struct Op_struct;
+
+/**************************************************************************************/
+/* Prototypes */
 
 #ifdef __cplusplus
-#define EXTERNC extern "C"
-#else
-#define EXTERNC
+extern "C" {
 #endif
 
-EXTERNC void ramulator_init();
-EXTERNC void ramulator_finish();
+void memtrace_init(void);
 
-EXTERNC int  ramulator_send(Mem_Req* scarab_req);
-EXTERNC void ramulator_tick();
+/* Implementing the frontend interface */
+Addr memtrace_next_fetch_addr(uns proc_id);
+Flag memtrace_can_fetch_op(uns proc_id);
+void memtrace_fetch_op(uns proc_id, Op* op);
+void memtrace_redirect(uns proc_id, uns64 inst_uid, Addr fetch_addr);
+void memtrace_recover(uns proc_id, uns64 inst_uid);
+void memtrace_retire(uns proc_id, uns64 inst_uid);
 
-EXTERNC int ramulator_get_chip_width();
-EXTERNC int ramulator_get_chip_size();
-EXTERNC int ramulator_get_num_chips();
-EXTERNC int ramulator_get_chip_row_buffer_size();
+/* For restarting of memtraces */
+void memtrace_done(void);
+void memtrace_close_trace_file(uns proc_id);
+void memtrace_setup(uns proc_id);
 
-EXTERNC Mem_Req* ramulator_search_queue(long phys_addr, Mem_Req_Type type);
-#undef EXTERNC
+#ifdef __cplusplus
+}
+#endif
 
-#endif  // __RAMULATOR_H__
+#endif
