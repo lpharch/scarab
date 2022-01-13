@@ -613,7 +613,7 @@ void uop_sim() {
 
 void full_sim() {
   uns8 proc_id;
-  Flag all_sim_done = FALSE;
+  Flag all_sim_done    = FALSE;
   Flag all_sim_running = TRUE;
 
   /* perform initialization  */
@@ -675,7 +675,7 @@ void full_sim() {
       reset_stats(TRUE);
     }
 
-    all_sim_done = TRUE;
+    all_sim_done    = TRUE;
     all_sim_running = TRUE;
     for(proc_id = 0; proc_id < NUM_CORES; proc_id++) {
       Flag reachedInstLimit = (INST_LIMIT &&
